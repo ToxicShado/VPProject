@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="Client/Client.csproj" Id="6f0b134a-7be3-405b-92d2-2c185426be7a">
+    <BuildDependency Project="Common/Common.csproj" />
+  </Project>
+  <Project Path="Common/Common.csproj" Id="c13de77c-f93f-4b84-bca0-941f38ff88d5" />
+  <Project Path="Server/Server.csproj" Id="ed18d618-66e1-4a00-928a-dc1c949239c7">
+    <BuildDependency Project="Common/Common.csproj" />
+  </Project>
+</Solution>
