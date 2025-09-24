@@ -10,10 +10,59 @@ using static Client.Program;
 
 namespace Client.Helpers
 {
+    class TheFileReader : IDisposable
+    {
+        private FileStream fileStream;
+        private StreamReader streamReader;
+        private bool disposed = false;
+
+        public TheFileReader(string path)
+        {
+            fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            streamReader = new StreamReader(fileStream);
+        }
+
+        public IEnumerable<string> ReadLines()
+        {
+            string line;
+            while ((line = streamReader.ReadLine()) != null)
+            {
+                yield return line;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposed)
+            {
+                if (disposing)
+                {
+                    if (streamReader != null)
+                        streamReader.Dispose();
+                    if (fileStream != null)
+                        fileStream.Dispose();
+                }
+                disposed = true;
+            }
+        }
+
+        ~TheFileReader()
+        {
+            Dispose(false);
+        }
+    }
+
     public static class FileOperations
     {
+        private static Random random = new Random();
 
-        public static Dictionary<EisMeta,List<EisSample>> LoadData(string folderPath = ".\\SoCEstimation")
+        public static Dictionary<EisMeta, List<EisSample>> LoadData(string folderPath = ".\\SoCEstimation")
         {
             var data = new Dictionary<EisMeta, List<EisSample>>();
             try
@@ -49,7 +98,7 @@ namespace Client.Helpers
                                     return data;
                                 }
 
-                                Console.WriteLine($"{ hioki }");
+                                Console.WriteLine($"{hioki}");
 
                                 var filenames = Directory.GetFiles(hioki, "*.csv").ToList();
 
@@ -59,14 +108,27 @@ namespace Client.Helpers
                                 {
                                     Console.WriteLine(file);
 
-                                    string[] lines;
+                                    List<string> lines = new List<string>();
                                     try
                                     {
-                                        lines = File.ReadAllLines(file);
+                                        using (var reader = new TheFileReader(file))
+                                        {
+                                            foreach (var line in reader.ReadLines())
+                                            {
+                                                //This can be used to simulate read errors, although mislim da nije to to,
+                                                //                                          Demonstrirati zatvaranje resursa i oporavak u slučaju prekida (simuliraj prekid veze usred prenosa).
+                                                // Theortically, zelimo da prekinemo vezu somehow, to bi radili u Program.cs
+                                                //if (random.Next(0, 100) == 10)
+                                                //{
+                                                //    throw new IOException("Simulated read error");
+                                                //}
+                                                lines.Add(line);
+                                            }
+                                        }
                                     }
-                                    catch (IOException)
+                                    catch (IOException ex)
                                     {
-                                        // Log or skip this file
+                                        Console.WriteLine($"IO Exception while reading {file}: {ex.Message}");
                                         continue;
                                     }
 
@@ -86,7 +148,7 @@ namespace Client.Helpers
                                                 FrequencyHz = frequency,
                                                 Range_ohm = r_ohm,
                                                 X_ohm = x_ohm,
-                                                Voltage_V= voltage,
+                                                Voltage_V = voltage,
                                                 T_degC = temperature_celsius,
                                                 R_ohm = range_ohm
                                             });
@@ -97,7 +159,7 @@ namespace Client.Helpers
                                     EisMeta metadata;
                                     DateTime dateOfTest;
                                     if (splitFilename.Length > 5 && DateTime.TryParse(splitFilename[4] + " " + splitFilename[5].Replace(".csv", ""), out dateOfTest))
-                                    { 
+                                    {
                                         metadata = new EisMeta
                                         {
                                             BatteryId = batteryId,
@@ -119,9 +181,7 @@ namespace Client.Helpers
             }
             catch (IOException ex)
             {
-                // Log the exception or handle as needed
                 Console.WriteLine("IO Exception: " + ex.Message);
-                // Optionally return empty data or rethrow
             }
             return data;
         }

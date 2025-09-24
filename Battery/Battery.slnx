@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="todo.txt" />
+  </Folder>
   <Project Path="Client/Client.csproj" Id="6f0b134a-7be3-405b-92d2-2c185426be7a">
     <BuildDependency Project="Common/Common.csproj" />
   </Project>
