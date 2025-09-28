@@ -17,6 +17,7 @@ namespace Server
 
         public CommandReturnValues EndSession()
         {
+            FileOperations.CleanupSession();
             SessionData = new EisMeta();
             return new CommandReturnValues()
             {
@@ -66,15 +67,31 @@ namespace Server
 
         public CommandReturnValues StartSession(EisMeta data)
         {
-            SessionData = data;
-            lastIndex = 0;
-            //Console.WriteLine($"Starting new session for BatteryId: {data.BatteryId}, TestId: {data.TestId}, SoC: {data.SoC}, FileName: {data.FileName}, TotalRows: {data.TotalRows}");
-            //throw new NotImplementedException();
-            return new CommandReturnValues()
+            try
             {
-                State = STATE.ACK,
-                Status = STATUS.COMPLETED
-            };
+                SessionData = data;
+                lastIndex = 0;
+                
+                // Initialize session directories and files
+                FileOperations.InitializeSession(data);
+                
+                Console.WriteLine($"Starting new session for BatteryId: {data.BatteryId}, TestId: {data.TestId}, SoC: {data.SoC}, FileName: {data.FileName}, TotalRows: {data.TotalRows}");
+                
+                return new CommandReturnValues()
+                {
+                    State = STATE.ACK,
+                    Status = STATUS.COMPLETED
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error starting session: {ex.Message}");
+                return new CommandReturnValues()
+                {
+                    State = STATE.NACK,
+                    Status = STATUS.COMPLETED
+                };
+            }
         }
 
         public bool validateSample(EisSample sample)
