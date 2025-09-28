@@ -45,9 +45,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BatteryServer.cs" />
+    <Compile Include="EventSubscribers\EventSubscribers.cs" />
     <Compile Include="Helpers\FileOperations.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Services\BatteryTransferEventService.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
