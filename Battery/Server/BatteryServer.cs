@@ -17,7 +17,6 @@ namespace Server
         static int totalSamplesReceived = 0;
         static int expectedTotalSamples = 0;
 
-        // Event service integration
         private readonly BatteryTransferEventService _eventService;
 
         public BatteryServer()
@@ -31,7 +30,6 @@ namespace Server
             {
                 FileOperations.CleanupSession();
                 
-                // Raise transfer completed event
                 bool isSuccessful = totalSamplesReceived > 0;
                 _eventService.RaiseTransferCompleted(SessionData, totalSamplesReceived, isSuccessful);
                 
@@ -86,7 +84,6 @@ namespace Server
                 totalSamplesReceived++;
                 isValid = true;
                 
-                // Raise sample received event
                 _eventService.RaiseSampleReceived(sample, SessionData, totalSamplesReceived, expectedTotalSamples, isValid);
                 
                 // Show progress every 10 samples or for small datasets every sample
@@ -106,13 +103,10 @@ namespace Server
             {
                 Console.WriteLine($"[SERVER STATUS] Error processing sample {sample?.RowIndex}: {ex.Message}");
                 
-                // Log failed sample
                 FileOperations.LogFailedSample(SessionData, sample, ex.Message);
                 
-                // Raise sample received event with invalid status
                 _eventService.RaiseSampleReceived(sample, SessionData, totalSamplesReceived + 1, expectedTotalSamples, isValid);
                 
-                // Raise specific warning for validation error
                 _eventService.RaiseWarning("SAMPLE_VALIDATION_ERROR", ex.Message, "WARNING", sample, SessionData);
                 
                 return new CommandReturnValues()

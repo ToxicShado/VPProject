@@ -52,6 +52,7 @@ namespace Server.Services
             if (_appSettings["V_threshold"] == null) _appSettings["V_threshold"] = "3.5";
             if (_appSettings["Z_threshold"] == null) _appSettings["Z_threshold"] = "0.05";
             if (_appSettings["DeviationPercent"] == null) _appSettings["DeviationPercent"] = "25";
+            if (_appSettings["T_threshold"] == null) _appSettings["T_threshold"] = "5.0";
             if (_appSettings["EnableDetailedConsoleLogging"] == null) _appSettings["EnableDetailedConsoleLogging"] = "false";
             if (_appSettings["EnableWarningConsoleLogging"] == null) _appSettings["EnableWarningConsoleLogging"] = "true";
             if (_appSettings["EnableFileLogging"] == null) _appSettings["EnableFileLogging"] = "true";
@@ -156,12 +157,38 @@ namespace Server.Services
     }
 
     /// <summary>
+    /// Event arguments for temperature spike event
+    /// </summary>
+    public class TemperatureSpikeEventArgs : EventArgs
+    {
+        public EisSample CurrentSample { get; set; }
+        public EisSample PreviousSample { get; set; }
+        public EisMeta SessionData { get; set; }
+        public double TemperatureDelta { get; set; }
+        public string Direction { get; set; }
+        public double Threshold { get; set; }
+        public DateTime DetectionTime { get; set; }
+
+        public TemperatureSpikeEventArgs(EisSample currentSample, EisSample previousSample, EisMeta sessionData, double temperatureDelta, string direction, double threshold)
+        {
+            CurrentSample = currentSample;
+            PreviousSample = previousSample;
+            SessionData = sessionData;
+            TemperatureDelta = temperatureDelta;
+            Direction = direction;
+            Threshold = threshold;
+            DetectionTime = DateTime.Now;
+        }
+    }
+
+    /// <summary>
     /// Delegate definitions for events
     /// </summary>
     public delegate void TransferStartedEventHandler(object sender, TransferStartedEventArgs e);
     public delegate void SampleReceivedEventHandler(object sender, SampleReceivedEventArgs e);
     public delegate void TransferCompletedEventHandler(object sender, TransferCompletedEventArgs e);
     public delegate void WarningRaisedEventHandler(object sender, WarningRaisedEventArgs e);
+    public delegate void TemperatureSpikeEventHandler(object sender, TemperatureSpikeEventArgs e);
 
     /// <summary>
     /// Event service for monitoring battery data transfer operations
@@ -175,12 +202,16 @@ namespace Server.Services
         private readonly double _voltageThreshold;
         private readonly double _impedanceThreshold;
         private readonly double _deviationPercent;
+        private readonly double _temperatureThreshold;
 
         // Session tracking
         private DateTime _sessionStartTime;
         private int _validSamplesCount;
         private int _rejectedSamplesCount;
         private EisMeta _currentSessionData;
+        
+        // Temperature spike detection
+        private EisSample _previousSample;
 
         /// <summary>
         /// Singleton instance
@@ -208,6 +239,7 @@ namespace Server.Services
         public event SampleReceivedEventHandler OnSampleReceived;
         public event TransferCompletedEventHandler OnTransferCompleted;
         public event WarningRaisedEventHandler OnWarningRaised;
+        public event TemperatureSpikeEventHandler OnTemperatureSpike;
 
         /// <summary>
         /// Private constructor for singleton
@@ -218,6 +250,7 @@ namespace Server.Services
             _voltageThreshold = double.TryParse(ConfigHelper.GetAppSetting("V_threshold"), out double vThreshold) ? vThreshold : 3.5;
             _impedanceThreshold = double.TryParse(ConfigHelper.GetAppSetting("Z_threshold"), out double zThreshold) ? zThreshold : 0.05;
             _deviationPercent = double.TryParse(ConfigHelper.GetAppSetting("DeviationPercent"), out double devPercent) ? devPercent : 25.0;
+            _temperatureThreshold = double.TryParse(ConfigHelper.GetAppSetting("T_threshold"), out double tThreshold) ? tThreshold : 5.0;
         }
 
         /// <summary>
@@ -229,6 +262,7 @@ namespace Server.Services
             _validSamplesCount = 0;
             _rejectedSamplesCount = 0;
             _currentSessionData = sessionData;
+            _previousSample = null; // Reset previous sample for new session
 
             var args = new TransferStartedEventArgs(sessionData, expectedSamples);
             OnTransferStarted?.Invoke(this, args);
@@ -249,6 +283,13 @@ namespace Server.Services
 
             // Check for warnings based on configuration thresholds
             CheckForWarnings(sample, sessionData);
+            
+            // Check for temperature spikes if we have a valid sample
+            if (isValid && sample != null)
+            {
+                CheckForTemperatureSpike(sample, sessionData);
+                _previousSample = sample; // Store current sample as previous for next comparison
+            }
         }
 
         /// <summary>
@@ -258,6 +299,9 @@ namespace Server.Services
         {
             var args = new TransferCompletedEventArgs(sessionData, _sessionStartTime, totalSamples, _validSamplesCount, _rejectedSamplesCount, isSuccessful);
             OnTransferCompleted?.Invoke(this, args);
+            
+            // Reset previous sample at end of session
+            _previousSample = null;
         }
 
         /// <summary>
@@ -267,6 +311,47 @@ namespace Server.Services
         {
             var args = new WarningRaisedEventArgs(warningType, message, severity, sample, sessionData);
             OnWarningRaised?.Invoke(this, args);
+        }
+
+        /// <summary>
+        /// Raise temperature spike event
+        /// </summary>
+        public void RaiseTemperatureSpike(EisSample currentSample, EisSample previousSample, EisMeta sessionData, double temperatureDelta, string direction)
+        {
+            var args = new TemperatureSpikeEventArgs(currentSample, previousSample, sessionData, temperatureDelta, direction, _temperatureThreshold);
+            OnTemperatureSpike?.Invoke(this, args);
+        }
+
+        /// <summary>
+        /// Check for temperature spikes between consecutive measurements
+        /// Formula: ?T = T(t) - T(t-?t)
+        /// </summary>
+        private void CheckForTemperatureSpike(EisSample currentSample, EisMeta sessionData)
+        {
+            if (_previousSample == null || currentSample == null) return;
+
+            // Calculate ?T = T(t) - T(t-?t)
+            double temperatureDelta = currentSample.T_degC - _previousSample.T_degC;
+            double absoluteDelta = Math.Abs(temperatureDelta);
+
+            // Check if |?T| > T_threshold
+            if (absoluteDelta > _temperatureThreshold)
+            {
+                string direction = temperatureDelta > 0 ? "porast" : "pad";
+                
+                // Raise the TemperatureSpike event
+                RaiseTemperatureSpike(currentSample, _previousSample, sessionData, temperatureDelta, direction);
+                
+                // Also raise a warning for logging purposes
+                string message = $"Temperature spike detected: {direction} | " +
+                               $"Current T: {currentSample.T_degC:F2}°C | " +
+                               $"?T: {temperatureDelta:F2}°C | " +
+                               $"Frequency: {currentSample.FrequencyHz:F2}Hz | " +
+                               $"SoC: {sessionData.SoC}% | " +
+                               $"Threshold: {_temperatureThreshold:F2}°C";
+
+                RaiseWarning("TEMPERATURE_SPIKE", message, "WARNING", currentSample, sessionData);
+            }
         }
 
         /// <summary>
