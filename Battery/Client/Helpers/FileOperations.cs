@@ -58,6 +58,101 @@ namespace Client.Helpers
         }
     }
 
+    /// <summary>
+    /// Disposable wrapper for processing multiple files with proper resource cleanup
+    /// </summary>
+    class BatchFileProcessor : IDisposable
+    {
+        private List<string> fileList;
+        private bool disposed = false;
+
+        public BatchFileProcessor(string folderPath)
+        {
+            if (!Directory.Exists(folderPath))
+                throw new DirectoryNotFoundException($"Directory not found: {folderPath}");
+
+            fileList = Directory.GetFiles(folderPath, "*.csv").ToList();
+        }
+
+        public List<(string filePath, List<string> lines)> ProcessFiles()
+        {
+            if (disposed)
+                throw new ObjectDisposedException(nameof(BatchFileProcessor));
+
+            var results = new List<(string filePath, List<string> lines)>();
+
+            foreach (var file in fileList)
+            {
+                Console.WriteLine($"Processing file: {file}");
+                var fileResult = ProcessSingleFile(file);
+                if (fileResult.HasValue)
+                {
+                    results.Add(fileResult.Value);
+                }
+            }
+
+            return results;
+        }
+
+        private (string filePath, List<string> lines)? ProcessSingleFile(string file)
+        {
+            List<string> lines = new List<string>();
+            
+            try
+            {
+                using (var reader = new TheFileReader(file))
+                {
+                    foreach (var line in reader.ReadLines())
+                    {
+                        lines.Add(line);
+                    }
+                }
+                
+                return (file, lines);
+            }
+            catch (IOException ex)
+            {
+                Console.WriteLine($"IO Exception while reading {file}: {ex.Message}");
+                return null;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Console.WriteLine($"Access denied for file {file}: {ex.Message}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Unexpected error processing file {file}: {ex.Message}");
+                return null;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposed)
+            {
+                if (disposing)
+                {
+                    // Clear file list
+                    fileList?.Clear();
+                    fileList = null;
+                }
+                disposed = true;
+            }
+        }
+
+        ~BatchFileProcessor()
+        {
+            Dispose(false);
+        }
+    }
+
     public static class FileOperations
     {
         private static Random random = new Random();
@@ -65,115 +160,110 @@ namespace Client.Helpers
         public static Dictionary<EisMeta, List<EisSample>> LoadData(string folderPath = ".\\MockData")
         {
             var data = new Dictionary<EisMeta, List<EisSample>>();
+            
             try
             {
-                if (Directory.Exists(folderPath))
+                using (var processor = new BatchFileProcessor(folderPath))
                 {
-                    var csvFiles = Directory.GetFiles(folderPath, "*.csv").ToList();
-
-                    if (csvFiles.Count <= 0)
+                    foreach (var (filePath, lines) in processor.ProcessFiles())
                     {
-                        return data;
-                    }
-
-                    foreach (var file in csvFiles)
-                    {
-                        Console.WriteLine($"Processing file: {file}");
-
-                        List<string> lines = new List<string>();
-                        try
+                        var processedData = ProcessFileData(filePath, lines);
+                        if (processedData.HasValue)
                         {
-                            using (var reader = new TheFileReader(file))
-                            {
-                                foreach (var line in reader.ReadLines())
-                                {
-                                    //This can be used to simulate read errors, although mislim da nije to to,
-                                    //                                          Demonstrirati zatvaranje resursa i oporavak u slučaju prekida (simuliraj prekid veze usred prenosa).
-                                    // Theortically, zelimo da prekinemo vezu somehow, to bi radili u Program.cs
-                                    //if (random.Next(0, 100) == 10)
-                                    //{
-                                    //    throw new IOException("Simulated read error");
-                                    //}
-                                    lines.Add(line);
-                                }
-                            }
-                        }
-                        catch (IOException ex)
-                        {
-                            Console.WriteLine($"IO Exception while reading {file}: {ex.Message}");
-                            continue;
-                        }
-
-                        List<EisSample> batteryData = new List<EisSample>();
-                        int rowIndex = 1;
-
-                        // Skip header line (first line)
-                        foreach (var line in lines.Skip(1))
-                        {
-                            var parts = line.Split(',');
-                            if (parts.Length >= 6 &&
-                                double.TryParse(parts[0], out double frequency) &&
-                                double.TryParse(parts[1], out double r_ohm) &&
-                                double.TryParse(parts[2], out double x_ohm) &&
-                                double.TryParse(parts[3], out double voltage) &&
-                                double.TryParse(parts[4], out double temperature_celsius) &&
-                                double.TryParse(parts[5], out double range_ohm))
-                            {
-                                batteryData.Add(new EisSample
-                                {
-                                    RowIndex = rowIndex++,
-                                    FrequencyHz = frequency,
-                                    R_ohm = r_ohm,
-                                    X_ohm = x_ohm,
-                                    Voltage_V = voltage,
-                                    T_degC = temperature_celsius,
-                                    Range_ohm = range_ohm,
-                                    TimestampLocal = DateTime.Now
-                                });
-                            }
-                        }
-
-                        // Parse filename to extract metadata
-                        var fileName = Path.GetFileName(file);
-                        var splitFilename = fileName.Split('_');
-                        
-                        if (splitFilename.Length >= 6)
-                        {
-                            var batteryId = "IFR14500"; // Extract from filename
-                            var testId = splitFilename[0]; // "Hk"
-                            var soc = splitFilename[3]; // SoC percentage
-                            
-                            // Try to parse date and time
-                            DateTime dateOfTest = DateTime.Now;
-                            if (splitFilename.Length > 5)
-                            {
-                                var dateStr = splitFilename[4];
-                                var timeStr = splitFilename[5].Replace(".csv", "");
-                                DateTime.TryParse($"{dateStr} {timeStr.Replace("-", ":")}", out dateOfTest);
-                            }
-
-                            var metadata = new EisMeta
-                            {
-                                BatteryId = batteryId,
-                                TestId = testId,
-                                SoC = soc,
-                                FileName = fileName,
-                                TotalRows = batteryData.Count
-                            };
-
-                            if (metadata != null && batteryData != null && batteryData.Count > 0)
-                            {
-                                data[metadata] = batteryData;
-                            }
+                            data[processedData.Value.metadata] = processedData.Value.samples;
                         }
                     }
                 }
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                Console.WriteLine($"Directory not found: {ex.Message}");
             }
             catch (IOException ex)
             {
                 Console.WriteLine("IO Exception: " + ex.Message);
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Unexpected error: {ex.Message}");
+            }
+            
             return data;
+        }
+
+        private static (EisMeta metadata, List<EisSample> samples)? ProcessFileData(string filePath, List<string> lines)
+        {
+            try
+            {
+                List<EisSample> batteryData = new List<EisSample>();
+                int rowIndex = 1;
+
+                // Skip header line (first line)
+                foreach (var line in lines.Skip(1))
+                {
+                    var parts = line.Split(',');
+                    if (parts.Length >= 6 &&
+                        double.TryParse(parts[0], out double frequency) &&
+                        double.TryParse(parts[1], out double r_ohm) &&
+                        double.TryParse(parts[2], out double x_ohm) &&
+                        double.TryParse(parts[3], out double voltage) &&
+                        double.TryParse(parts[4], out double temperature_celsius) &&
+                        double.TryParse(parts[5], out double range_ohm))
+                    {
+                        batteryData.Add(new EisSample
+                        {
+                            RowIndex = rowIndex++,
+                            FrequencyHz = frequency,
+                            R_ohm = r_ohm,
+                            X_ohm = x_ohm,
+                            Voltage_V = voltage,
+                            T_degC = temperature_celsius,
+                            Range_ohm = range_ohm,
+                            TimestampLocal = DateTime.Now
+                        });
+                    }
+                }
+
+                // Parse filename to extract metadata
+                var fileName = Path.GetFileName(filePath);
+                var splitFilename = fileName.Split('_');
+                
+                if (splitFilename.Length >= 6)
+                {
+                    var batteryId = "IFR14500"; // Extract from filename
+                    var testId = splitFilename[0]; // "Hk"
+                    var soc = splitFilename[3]; // SoC percentage
+                    
+                    // Try to parse date and time
+                    DateTime dateOfTest = DateTime.Now;
+                    if (splitFilename.Length > 5)
+                    {
+                        var dateStr = splitFilename[4];
+                        var timeStr = splitFilename[5].Replace(".csv", "");
+                        DateTime.TryParse($"{dateStr} {timeStr.Replace("-", ":")}", out dateOfTest);
+                    }
+
+                    var metadata = new EisMeta
+                    {
+                        BatteryId = batteryId,
+                        TestId = testId,
+                        SoC = soc,
+                        FileName = fileName,
+                        TotalRows = batteryData.Count
+                    };
+
+                    if (metadata != null && batteryData != null && batteryData.Count > 0)
+                    {
+                        return (metadata, batteryData);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error processing file data for {filePath}: {ex.Message}");
+            }
+            
+            return null;
         }
     }
 }
