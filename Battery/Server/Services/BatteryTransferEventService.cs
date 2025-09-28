@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using System;
 using System.Collections.Specialized;
 using System.IO;
@@ -271,6 +271,13 @@ namespace Server.Services
         // Temperature spike detection
         private EisSample _previousSample;
 
+        // Running averages for deviation detection
+        private double _runningVoltageSum = 0;
+        private double _runningImpedanceSum = 0;
+        private double _runningResistanceSum = 0;
+        private int _averageSampleCount = 0;
+        private const int MIN_SAMPLES_FOR_AVERAGE = 5; // Minimum samples needed to calculate meaningful average
+
         /// <summary>
         /// Singleton instance
         /// </summary>
@@ -328,6 +335,12 @@ namespace Server.Services
             _currentSessionData = sessionData;
             _previousSample = null; // Reset previous sample for new session
 
+            // Reset running averages for new session
+            _runningVoltageSum = 0;
+            _runningImpedanceSum = 0;
+            _runningResistanceSum = 0;
+            _averageSampleCount = 0;
+
             var args = new TransferStartedEventArgs(sessionData, expectedSamples);
             OnTransferStarted?.Invoke(this, args);
         }
@@ -345,6 +358,12 @@ namespace Server.Services
             var args = new SampleReceivedEventArgs(sample, sessionData, sampleCount, totalSamples, isValid);
             OnSampleReceived?.Invoke(this, args);
 
+            // Update running averages for valid samples only
+            if (isValid && sample != null)
+            {
+                UpdateRunningAverages(sample);
+            }
+
             // Check for warnings based on configuration thresholds
             CheckForWarnings(sample, sessionData);
             
@@ -353,6 +372,95 @@ namespace Server.Services
             {
                 CheckForTemperatureSpike(sample, sessionData);
                 _previousSample = sample; // Store current sample as previous for next comparison
+            }
+        }
+
+        /// <summary>
+        /// Update running averages with new valid sample
+        /// </summary>
+        private void UpdateRunningAverages(EisSample sample)
+        {
+            _averageSampleCount++;
+            _runningVoltageSum += sample.Voltage_V;
+            _runningResistanceSum += sample.R_ohm;
+            
+            // Calculate total impedance for this sample
+            double totalImpedance = Math.Sqrt(sample.R_ohm * sample.R_ohm + sample.X_ohm * sample.X_ohm);
+            _runningImpedanceSum += totalImpedance;
+        }
+
+        /// <summary>
+        /// Check for warnings based on configuration thresholds
+        /// </summary>
+        private void CheckForWarnings(EisSample sample, EisMeta sessionData)
+        {
+            if (sample == null) return;
+
+            // Check voltage threshold
+            if (sample.Voltage_V < _voltageThreshold)
+            {
+                RaiseWarning("VOLTAGE_LOW", 
+                    $"Voltage ({sample.Voltage_V:F3}V) below threshold ({_voltageThreshold}V)", 
+                    "WARNING", sample, sessionData);
+            }
+
+            // Check impedance threshold  
+            double totalImpedance = Math.Sqrt(sample.R_ohm * sample.R_ohm + sample.X_ohm * sample.X_ohm);
+            if (totalImpedance < _impedanceThreshold)
+            {
+                RaiseWarning("IMPEDANCE_LOW", 
+                    $"Total impedance ({totalImpedance:F6}Ω) below threshold ({_impedanceThreshold}Ω)", 
+                    "WARNING", sample, sessionData);
+            }
+
+            // Check for ±25% deviation from running average (only after we have enough samples)
+            if (_averageSampleCount >= MIN_SAMPLES_FOR_AVERAGE)
+            {
+                CheckAverageDeviations(sample, sessionData, totalImpedance);
+            }
+        }
+
+        /// <summary>
+        /// Check for ±25% deviation from running averages
+        /// </summary>
+        private void CheckAverageDeviations(EisSample sample, EisMeta sessionData, double totalImpedance)
+        {
+            // Calculate current running averages
+            double avgVoltage = _runningVoltageSum / _averageSampleCount;
+            double avgResistance = _runningResistanceSum / _averageSampleCount;
+            double avgImpedance = _runningImpedanceSum / _averageSampleCount;
+
+            // Check voltage deviation
+            double voltageDeviation = Math.Abs((sample.Voltage_V - avgVoltage) / avgVoltage) * 100;
+            if (voltageDeviation > _deviationPercent)
+            {
+                RaiseWarning("VOLTAGE_AVERAGE_DEVIATION", 
+                    $"Voltage deviation from average: {voltageDeviation:F1}% | " +
+                    $"Current: {sample.Voltage_V:F3}V | Average: {avgVoltage:F3}V | " +
+                    $"Threshold: ±{_deviationPercent}% | Sample: {sample.RowIndex}", 
+                    "WARNING", sample, sessionData);
+            }
+
+            // Check resistance deviation
+            double resistanceDeviation = Math.Abs((sample.R_ohm - avgResistance) / avgResistance) * 100;
+            if (resistanceDeviation > _deviationPercent)
+            {
+                RaiseWarning("RESISTANCE_AVERAGE_DEVIATION", 
+                    $"Resistance deviation from average: {resistanceDeviation:F1}% | " +
+                    $"Current: {sample.R_ohm:F6}Ω | Average: {avgResistance:F6}Ω | " +
+                    $"Threshold: ±{_deviationPercent}% | Sample: {sample.RowIndex}", 
+                    "WARNING", sample, sessionData);
+            }
+
+            // Check impedance deviation
+            double impedanceDeviation = Math.Abs((totalImpedance - avgImpedance) / avgImpedance) * 100;
+            if (impedanceDeviation > _deviationPercent)
+            {
+                RaiseWarning("IMPEDANCE_AVERAGE_DEVIATION", 
+                    $"Impedance deviation from average: {impedanceDeviation:F1}% | " +
+                    $"Current: {totalImpedance:F6}Ω | Average: {avgImpedance:F6}Ω | " +
+                    $"Threshold: ±{_deviationPercent}% | Sample: {sample.RowIndex}", 
+                    "WARNING", sample, sessionData);
             }
         }
 
@@ -455,11 +563,11 @@ namespace Server.Services
         {
             if (_previousSample == null || currentSample == null) return;
 
-            // Calculate ?T = T(t) - T(t-?t)
+            // Calculate ΔT = T(t) - T(t-Δt)
             double temperatureDelta = currentSample.T_degC - _previousSample.T_degC;
             double absoluteDelta = Math.Abs(temperatureDelta);
 
-            // Check if |?T| > T_threshold
+            // Check if |ΔT| > T_threshold
             if (absoluteDelta > _temperatureThreshold)
             {
                 string direction = temperatureDelta > 0 ? "porast" : "pad";
@@ -469,66 +577,13 @@ namespace Server.Services
                 
                 // Also raise a warning for logging purposes
                 string message = $"Temperature spike detected: {direction} | " +
-                               $"Current T: {currentSample.T_degC:F2}�C | " +
-                               $"?T: {temperatureDelta:F2}�C | " +
+                               $"Current T: {currentSample.T_degC:F2}°C | " +
+                               $"?T: {temperatureDelta:F2}°C | " +
                                $"Frequency: {currentSample.FrequencyHz:F2}Hz | " +
                                $"SoC: {sessionData.SoC}% | " +
-                               $"Threshold: {_temperatureThreshold:F2}�C";
+                               $"Threshold: {_temperatureThreshold:F2}°C";
 
                 RaiseWarning("TEMPERATURE_SPIKE", message, "WARNING", currentSample, sessionData);
-            }
-        }
-
-        /// <summary>
-        /// Check for warnings based on configuration thresholds
-        /// </summary>
-        private void CheckForWarnings(EisSample sample, EisMeta sessionData)
-        {
-            if (sample == null) return;
-
-            // Check voltage threshold
-            if (sample.Voltage_V < _voltageThreshold)
-            {
-                RaiseWarning("VOLTAGE_LOW", 
-                    $"Voltage ({sample.Voltage_V:F3}V) below threshold ({_voltageThreshold}V)", 
-                    "WARNING", sample, sessionData);
-            }
-
-            // Check impedance threshold  
-            double totalImpedance = Math.Sqrt(sample.R_ohm * sample.R_ohm + sample.X_ohm * sample.X_ohm);
-            if (totalImpedance < _impedanceThreshold)
-            {
-                RaiseWarning("IMPEDANCE_LOW", 
-                    $"Total impedance ({totalImpedance:F6}?) below threshold ({_impedanceThreshold}?)", 
-                    "WARNING", sample, sessionData);
-            }
-
-            // Check temperature range (reasonable battery operating range)
-            if (sample.T_degC < -20 || sample.T_degC > 60)
-            {
-                RaiseWarning("TEMPERATURE_OUT_OF_RANGE", 
-                    $"Temperature ({sample.T_degC:F1}�C) outside normal operating range (-20�C to 60�C)", 
-                    "CRITICAL", sample, sessionData);
-            }
-
-            // Check for abnormal frequency values
-            if (sample.FrequencyHz > 100000) // 100kHz
-            {
-                RaiseWarning("FREQUENCY_HIGH", 
-                    $"Frequency ({sample.FrequencyHz:F0}Hz) unusually high", 
-                    "INFO", sample, sessionData);
-            }
-
-            // Check for deviation in range (if range is significantly different from expected)
-            if (sample.Range_ohm > 0 && totalImpedance > 0)
-            {
-                double deviationPercent = Math.Abs((sample.Range_ohm - totalImpedance) / totalImpedance) * 100;
-                if (deviationPercent > _deviationPercent)
-                {
-                    RaiseWarning("RANGE_DEVIATION", 
-                        $"Range deviation ({deviationPercent:F1}%) exceeds threshold ({_deviationPercent}%)", 
-                        "WARNING", sample, sessionData);
-                }
             }
         }
     }
