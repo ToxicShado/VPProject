@@ -14,11 +14,21 @@ namespace Server
 
         public static EisMeta SessionData = new EisMeta();
         static double lastIndex = 0;
+        static int totalSamplesReceived = 0;
+        static int expectedTotalSamples = 0;
 
         public CommandReturnValues EndSession()
         {
             FileOperations.CleanupSession();
+            
+            Console.WriteLine($"[SERVER STATUS] Transfer completed! Total samples processed: {totalSamplesReceived}/{expectedTotalSamples}");
+            Console.WriteLine($"[SERVER STATUS] Session ended for BatteryId: {SessionData?.BatteryId}, TestId: {SessionData?.TestId}");
+            
             SessionData = new EisMeta();
+            totalSamplesReceived = 0;
+            expectedTotalSamples = 0;
+            lastIndex = 0;
+            
             return new CommandReturnValues()
             {
                 State = STATE.ACK,
@@ -28,10 +38,9 @@ namespace Server
 
         public CommandReturnValues PushSample(EisSample sample)
         {
-
-
             if (SessionData == null || SessionData == new EisMeta())
             {
+                Console.WriteLine("[SERVER STATUS] Error: No active session - sample rejected");
                 return new CommandReturnValues()
                 {
                     State = STATE.NACK,
@@ -39,15 +48,29 @@ namespace Server
                 };
             }
 
-
             try
             {
                 validateSample(sample);
                 FileOperations.AddNewEntry(SessionData, sample);
+                
+                totalSamplesReceived++;
+                
+                // Show progress every 10 samples or for small datasets every sample
+                if (expectedTotalSamples <= 20 || totalSamplesReceived % 10 == 0 || totalSamplesReceived == expectedTotalSamples)
+                {
+                    double progressPercentage = expectedTotalSamples > 0 ? (double)totalSamplesReceived / expectedTotalSamples * 100 : 0;
+                    Console.WriteLine($"[SERVER STATUS] Transfer in progress... {totalSamplesReceived}/{expectedTotalSamples} samples ({progressPercentage:F1}%)");
+                }
+                
+                return new CommandReturnValues()
+                {
+                    State = STATE.ACK,
+                    Status = totalSamplesReceived >= expectedTotalSamples ? STATUS.COMPLETED : STATUS.IN_PROGRESS
+                };
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error adding new entry: {ex.Message}");
+                Console.WriteLine($"[SERVER STATUS] Error processing sample {sample?.RowIndex}: {ex.Message}");
                 FileOperations.LogFailedSample(SessionData, sample, ex.Message);
                 return new CommandReturnValues()
                 {
@@ -55,14 +78,6 @@ namespace Server
                     Status = STATUS.COMPLETED
                 };
             }
-            
-            
-
-            return new CommandReturnValues()
-            {
-                State = STATE.ACK,
-                Status = STATUS.COMPLETED
-            };
         }
 
         public CommandReturnValues StartSession(EisMeta data)
@@ -71,21 +86,24 @@ namespace Server
             {
                 SessionData = data;
                 lastIndex = 0;
+                totalSamplesReceived = 0;
+                expectedTotalSamples = data.TotalRows;
                 
                 // Initialize session directories and files
                 FileOperations.InitializeSession(data);
                 
-                Console.WriteLine($"Starting new session for BatteryId: {data.BatteryId}, TestId: {data.TestId}, SoC: {data.SoC}, FileName: {data.FileName}, TotalRows: {data.TotalRows}");
+                Console.WriteLine($"[SERVER STATUS] Session started for BatteryId: {data.BatteryId}, TestId: {data.TestId}, SoC: {data.SoC}%");
+                Console.WriteLine($"[SERVER STATUS] Expected {expectedTotalSamples} samples - transfer ready to begin...");
                 
                 return new CommandReturnValues()
                 {
                     State = STATE.ACK,
-                    Status = STATUS.COMPLETED
+                    Status = STATUS.IN_PROGRESS
                 };
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error starting session: {ex.Message}");
+                Console.WriteLine($"[SERVER STATUS] Error starting session: {ex.Message}");
                 return new CommandReturnValues()
                 {
                     State = STATE.NACK,

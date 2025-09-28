@@ -10,13 +10,13 @@ using static Client.Program;
 
 namespace Client.Helpers
 {
-    class TheFileReader : IDisposable
+    class CsvFileReader : IDisposable
     {
         private FileStream fileStream;
         private StreamReader streamReader;
         private bool disposed = false;
 
-        public TheFileReader(string path)
+        public CsvFileReader(string path)
         {
             fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             streamReader = new StreamReader(fileStream);
@@ -52,7 +52,7 @@ namespace Client.Helpers
             }
         }
 
-        ~TheFileReader()
+        ~CsvFileReader()
         {
             Dispose(false);
         }
@@ -100,7 +100,7 @@ namespace Client.Helpers
             
             try
             {
-                using (var reader = new TheFileReader(file))
+                using (var reader = new CsvFileReader(file))
                 {
                     foreach (var line in reader.ReadLines())
                     {

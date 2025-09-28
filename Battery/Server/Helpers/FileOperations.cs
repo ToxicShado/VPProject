@@ -75,6 +75,7 @@ namespace Server.Helpers
         private string sessionFilePath;
         private string rejectsFilePath;
         private bool disposed = false;
+        private static Random random = new Random();
 
         public SessionFileManager(string sessionPath)
         {
@@ -90,6 +91,13 @@ namespace Server.Helpers
 
             try
             {
+
+                // Simulate file I/O failure
+                if (random.Next(0, 100) < 8)
+                {
+                    throw new IOException("Simulated disk write failure");
+                }
+
                 using (var writer = new CsvFileWriter(sessionFilePath, true))
                 {
                     string csvLine = $"{sample.RowIndex},{sample.FrequencyHz},{sample.R_ohm},{sample.X_ohm}," +
