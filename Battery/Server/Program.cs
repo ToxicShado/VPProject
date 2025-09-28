@@ -23,7 +23,7 @@ namespace Server
             fileLogSubscriber.Subscribe(eventService);
             statisticsSubscriber.Subscribe(eventService);
 
-            Console.WriteLine("✅ Event subscribers initialized:");
+            Console.WriteLine("Event subscribers initialized:");
             Console.WriteLine("   - Console Event Logger");
             Console.WriteLine("   - File Event Logger");
             Console.WriteLine("   - Statistics Monitor");
@@ -34,8 +34,8 @@ namespace Server
                 using (ServiceHost host = new ServiceHost(typeof(BatteryServer)))
                 {
                     host.Open();
-                    Console.WriteLine("🚀 Battery Server is running and ready for connections...");
-                    Console.WriteLine("📊 Event monitoring is active");
+                    Console.WriteLine("Battery Server is running and ready for connections...");
+                    Console.WriteLine("Event monitoring is active");
                     Console.WriteLine("Press any key to display current statistics, or 'q' to quit");
                     
                     // Interactive loop for statistics and control
@@ -70,12 +70,12 @@ namespace Server
                     while (keyInfo.Key != ConsoleKey.Q);
 
                     host.Close();
-                    Console.WriteLine("✅ Battery Server stopped");
+                    Console.WriteLine("Battery Server stopped");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Server error: {ex.Message}");
+                Console.WriteLine($"Server error: {ex.Message}");
                 
                 // Raise error event
                 var eventService2 = BatteryTransferEventService.Instance;
@@ -89,11 +89,11 @@ namespace Server
                     consoleSubscriber.Unsubscribe(eventService);
                     fileLogSubscriber.Unsubscribe(eventService);
                     statisticsSubscriber.Unsubscribe(eventService);
-                    Console.WriteLine("✅ Event subscriptions cleaned up");
+                    Console.WriteLine("Event subscriptions cleaned up");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"⚠️ Error during cleanup: {ex.Message}");
+                    Console.WriteLine($"Error during cleanup: {ex.Message}");
                 }
             }
 

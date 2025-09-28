@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.ServiceModel.Description;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using static Client.Program;
 
@@ -15,15 +16,29 @@ namespace Client.Helpers
         private FileStream fileStream;
         private StreamReader streamReader;
         private bool disposed = false;
+        private readonly ILogger logger;
 
-        public CsvFileReader(string path)
+        public CsvFileReader(string path, ILogger logger = null)
         {
-            fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-            streamReader = new StreamReader(fileStream);
+            this.logger = logger ?? new FileLogger("log.txt");
+            try
+            {
+                fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                streamReader = new StreamReader(fileStream);
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogError($"Failed to open file: {path}", ex);
+                Dispose();
+                throw;
+            }
         }
 
         public IEnumerable<string> ReadLines()
         {
+            if (disposed)
+                throw new ObjectDisposedException(nameof(CsvFileReader));
+
             string line;
             while ((line = streamReader.ReadLine()) != null)
             {
@@ -43,10 +58,15 @@ namespace Client.Helpers
             {
                 if (disposing)
                 {
-                    if (streamReader != null)
-                        streamReader.Dispose();
-                    if (fileStream != null)
-                        fileStream.Dispose();
+                    try
+                    {
+                        streamReader?.Dispose();
+                        fileStream?.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        logger?.LogError("Error disposing CsvFileReader resources", ex);
+                    }
                 }
                 disposed = true;
             }
@@ -58,20 +78,23 @@ namespace Client.Helpers
         }
     }
 
-    /// <summary>
-    /// Disposable wrapper for processing multiple files with proper resource cleanup
-    /// </summary>
     class BatchFileProcessor : IDisposable
     {
         private List<string> fileList;
         private bool disposed = false;
+        private readonly ILogger logger;
 
-        public BatchFileProcessor(string folderPath)
+        public BatchFileProcessor(string folderPath, ILogger logger = null)
         {
-            if (!Directory.Exists(folderPath))
-                throw new DirectoryNotFoundException($"Directory not found: {folderPath}");
+            this.logger = logger ?? new FileLogger("log.txt");
 
-            fileList = Directory.GetFiles(folderPath, "*.csv").ToList();
+            if (!Directory.Exists(folderPath))
+            {
+                this.logger.LogError($"Directory not found: {folderPath}");
+                throw new DirectoryNotFoundException($"Directory not found: {folderPath}");
+            }
+
+            fileList = Directory.GetFiles(folderPath, "*.csv", SearchOption.AllDirectories).ToList();
         }
 
         public List<(string filePath, List<string> lines)> ProcessFiles()
@@ -83,7 +106,6 @@ namespace Client.Helpers
 
             foreach (var file in fileList)
             {
-                Console.WriteLine($"Processing file: {file}");
                 var fileResult = ProcessSingleFile(file);
                 if (fileResult.HasValue)
                 {
@@ -97,32 +119,31 @@ namespace Client.Helpers
         private (string filePath, List<string> lines)? ProcessSingleFile(string file)
         {
             List<string> lines = new List<string>();
-            
+
             try
             {
-                using (var reader = new CsvFileReader(file))
+                using (var reader = new CsvFileReader(file, logger))
                 {
                     foreach (var line in reader.ReadLines())
                     {
                         lines.Add(line);
                     }
                 }
-                
                 return (file, lines);
             }
             catch (IOException ex)
             {
-                Console.WriteLine($"IO Exception while reading {file}: {ex.Message}");
+                logger.LogError($"IO Exception while reading {file}", ex);
                 return null;
             }
             catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine($"Access denied for file {file}: {ex.Message}");
+                logger.LogError($"Access denied for file {file}", ex);
                 return null;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Unexpected error processing file {file}: {ex.Message}");
+                logger.LogError($"Unexpected error processing file {file}", ex);
                 return null;
             }
         }
@@ -139,8 +160,15 @@ namespace Client.Helpers
             {
                 if (disposing)
                 {
-                    fileList?.Clear();
-                    fileList = null;
+                    try
+                    {
+                        fileList?.Clear();
+                        fileList = null;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger?.LogError("Error disposing BatchFileProcessor resources", ex);
+                    }
                 }
                 disposed = true;
             }
@@ -155,38 +183,63 @@ namespace Client.Helpers
     public static class FileOperations
     {
         private static Random random = new Random();
+        private static readonly ILogger logger = new FileLogger("log.txt");
+        private const int REQUIRED_ENTRIES = 28;
 
-        public static Dictionary<EisMeta, List<EisSample>> LoadData(string folderPath = ".\\MockData")
+        public static Dictionary<EisMeta, List<EisSample>> LoadData(string baseFolderPath = ".\\MockData")
         {
             var data = new Dictionary<EisMeta, List<EisSample>>();
-            
+
             try
             {
-                using (var processor = new BatchFileProcessor(folderPath))
+                string searchPattern = Path.Combine(baseFolderPath, "B*", "EIS measurements", "Test_*", "Hioki");
+                var directories = Directory.GetDirectories(baseFolderPath, "B*", SearchOption.TopDirectoryOnly);
+
+                foreach (var batteryDir in directories)
                 {
-                    foreach (var (filePath, lines) in processor.ProcessFiles())
+                    var eisMeasurementsDir = Path.Combine(batteryDir, "EIS measurements");
+                    if (!Directory.Exists(eisMeasurementsDir))
                     {
-                        var processedData = ProcessFileData(filePath, lines);
-                        if (processedData.HasValue)
+                        continue;
+                    }
+
+                    var testDirs = Directory.GetDirectories(eisMeasurementsDir, "Test_*", SearchOption.TopDirectoryOnly);
+
+                    foreach (var testDir in testDirs)
+                    {
+                        var hiokiDir = Path.Combine(testDir, "Hioki");
+                        if (!Directory.Exists(hiokiDir))
                         {
-                            data[processedData.Value.metadata] = processedData.Value.samples;
+                            continue;
+                        }
+
+                        using (var processor = new BatchFileProcessor(hiokiDir, logger))
+                        {
+                            foreach (var (filePath, lines) in processor.ProcessFiles())
+                            {
+                                var processedData = ProcessFileData(filePath, lines);
+                                if (processedData.HasValue)
+                                {
+                                    data[processedData.Value.metadata] = processedData.Value.samples;
+                                }
+                            }
                         }
                     }
                 }
             }
             catch (DirectoryNotFoundException ex)
             {
-                Console.WriteLine($"Directory not found: {ex.Message}");
+                logger.LogError("Directory not found", ex);
             }
             catch (IOException ex)
             {
-                Console.WriteLine("IO Exception: " + ex.Message);
+                logger.LogError("IO Exception during data loading", ex);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Unexpected error: {ex.Message}");
+                logger.LogError("Unexpected error during data loading", ex);
             }
-            
+
             return data;
         }
 
@@ -194,15 +247,49 @@ namespace Client.Helpers
         {
             try
             {
+                var fileName = Path.GetFileName(filePath);
+
+                var pathParts = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                string batteryId = ExtractBatteryId(pathParts);
+                string testId = ExtractTestId(pathParts);
+
+                if (string.IsNullOrEmpty(batteryId) || string.IsNullOrEmpty(testId))
+                {
+                    logger.LogError($"Failed to extract battery ID or test ID from path: {filePath}");
+                    return null;
+                }
+
+                string soc = ExtractSoCFromFilename(fileName);
+                if (string.IsNullOrEmpty(soc))
+                {
+                    soc = "Unknown";
+                }
+
+                if (lines.Count < REQUIRED_ENTRIES + 1)
+                {
+                    logger.LogError($"File {fileName} has insufficient data. Expected at least {REQUIRED_ENTRIES} entries, found {lines.Count - 1} (excluding header)");
+                }
+
                 List<EisSample> batteryData = new List<EisSample>();
                 int rowIndex = 1;
 
-                // Skip header line (first line)
                 foreach (var line in lines.Skip(1))
                 {
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
                     var parts = line.Split(',');
-                    if (parts.Length >= 6 &&
-                        double.TryParse(parts[0], out double frequency) &&
+                    if (parts.Length < 6)
+                    {
+                        logger.LogError($"Insufficient columns in row {rowIndex} of file {fileName}. Expected 6, found {parts.Length}");
+                        rowIndex++;
+                        continue;
+                    }
+
+                    if (double.TryParse(parts[0], out double frequency) &&
                         double.TryParse(parts[1], out double r_ohm) &&
                         double.TryParse(parts[2], out double x_ohm) &&
                         double.TryParse(parts[3], out double voltage) &&
@@ -211,7 +298,7 @@ namespace Client.Helpers
                     {
                         batteryData.Add(new EisSample
                         {
-                            RowIndex = rowIndex++,
+                            RowIndex = rowIndex,
                             FrequencyHz = frequency,
                             R_ohm = r_ohm,
                             X_ohm = x_ohm,
@@ -221,47 +308,79 @@ namespace Client.Helpers
                             TimestampLocal = DateTime.Now
                         });
                     }
-                }
+                    else
+                    {
+                        logger.LogError($"Invalid numeric data in row {rowIndex} of file {fileName}: {line}");
+                    }
 
-                // Parse filename to extract metadata
-                var fileName = Path.GetFileName(filePath);
-                var splitFilename = fileName.Split('_');
-                
-                if (splitFilename.Length >= 6)
+                    rowIndex++;
+                }
+    
+                if (batteryData.Count == 0)
                 {
-                    var batteryId = "IFR14500"; // Extract from filename
-                    var testId = splitFilename[0]; // "Hk"
-                    var soc = splitFilename[3]; // SoC percentage
-                    
-                    // Try to parse date and time
-                    DateTime dateOfTest = DateTime.Now;
-                    if (splitFilename.Length > 5)
-                    {
-                        var dateStr = splitFilename[4];
-                        var timeStr = splitFilename[5].Replace(".csv", "");
-                        DateTime.TryParse($"{dateStr} {timeStr.Replace("-", ":")}", out dateOfTest);
-                    }
-
-                    var metadata = new EisMeta
-                    {
-                        BatteryId = batteryId,
-                        TestId = testId,
-                        SoC = soc,
-                        FileName = fileName,
-                        TotalRows = batteryData.Count
-                    };
-
-                    if (metadata != null && batteryData != null && batteryData.Count > 0)
-                    {
-                        return (metadata, batteryData);
-                    }
+                    logger.LogError($"No valid data entries found in file {fileName}");
+                    return null;
                 }
+
+                var metadata = new EisMeta
+                {
+                    BatteryId = batteryId,
+                    TestId = testId,
+                    SoC = soc,
+                    FileName = fileName,
+                    TotalRows = batteryData.Count
+                };
+
+                return (metadata, batteryData);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error processing file data for {filePath}: {ex.Message}");
+                logger.LogError($"Error processing file data for {filePath}", ex);
+                return null;
             }
-            
+        }
+
+        private static string ExtractBatteryId(string[] pathParts)
+        {
+            var batteryPattern = new Regex(@"^B\d+$", RegexOptions.IgnoreCase);
+
+            foreach (var part in pathParts)
+            {
+                if (batteryPattern.IsMatch(part))
+                {
+                    return part;
+                }
+            }
+
+            return null;
+        }
+
+        private static string ExtractTestId(string[] pathParts)
+        {
+            var testPattern = new Regex(@"^Test_\d+$", RegexOptions.IgnoreCase);
+
+            foreach (var part in pathParts)
+            {
+                if (testPattern.IsMatch(part))
+                {
+                    return part;
+                }
+            }
+
+            return null;
+        }
+
+        private static string ExtractSoCFromFilename(string fileName)
+        {
+            var socPattern = @"SoC_(\d+)";
+
+            var match = Regex.Match(fileName, socPattern, RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                return match.Groups[1].Value + "%";
+            }
+
+            logger.LogError($"Could not extract SoC from filename using SoC_XX pattern: {fileName}");
             return null;
         }
     }

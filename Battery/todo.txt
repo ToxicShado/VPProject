@@ -14,3 +14,8 @@ Server, klijent, ili oba?
 petljom kroz CSV i šalje po jedan red (jedno merenje za datu frekvenciju);
 
 da li to znaci da mozemo sve da sacuvamo pa redom da saljemo, ili da saljemo live, dok citamo iz fajla
+
+
+
+
+check if i have gotten 28 rows exactly  
