@@ -13,7 +13,7 @@ namespace Server
     {
 
         public static EisMeta SessionData = new EisMeta();
-        static double lastIndex = -1;
+        static double lastIndex = 0;
 
         public CommandReturnValues EndSession()
         {
@@ -39,8 +39,23 @@ namespace Server
             }
 
 
-
-            FileOperations.AddNewEntry(SessionData, sample);
+            try
+            {
+                validateSample(sample);
+                FileOperations.AddNewEntry(SessionData, sample);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error adding new entry: {ex.Message}");
+                FileOperations.LogFailedSample(SessionData, sample, ex.Message);
+                return new CommandReturnValues()
+                {
+                    State = STATE.NACK,
+                    Status = STATUS.COMPLETED
+                };
+            }
+            
+            
 
             return new CommandReturnValues()
             {
@@ -52,7 +67,7 @@ namespace Server
         public CommandReturnValues StartSession(EisMeta data)
         {
             SessionData = data;
-            lastIndex = -1;
+            lastIndex = 0;
             //Console.WriteLine($"Starting new session for BatteryId: {data.BatteryId}, TestId: {data.TestId}, SoC: {data.SoC}, FileName: {data.FileName}, TotalRows: {data.TotalRows}");
             //throw new NotImplementedException();
             return new CommandReturnValues()

@@ -43,8 +43,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Models\Battery.cs" />
     <Compile Include="Exceptions\DataFormatFault.cs" />
+    <Compile Include="Models\Battery.cs" />
     <Compile Include="Models\EisMeta.cs" />
     <Compile Include="Models\EisSample.cs" />
     <Compile Include="IBatteryCommands.cs" />

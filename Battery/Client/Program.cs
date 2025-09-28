@@ -24,9 +24,12 @@ namespace Client
             var sendSample = new EisSample();
             foreach (var key in keys)
             {
+                Console.WriteLine("\n\n");
+                Console.WriteLine(key);
                 proxy.StartSession(key);
                 foreach (var sample in batteries[key])
                 {
+                    Console.WriteLine(sample);
                     proxy.PushSample(sample);
                 }
                 proxy.EndSession();

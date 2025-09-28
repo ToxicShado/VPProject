@@ -10,5 +10,10 @@ namespace Common
         [DataMember] public string SoC { get; set; }
         [DataMember] public string FileName { get; set; }
         [DataMember] public int TotalRows { get; set; }
+
+        public override string ToString()
+        {
+            return $"BatteryId: {BatteryId}, TestId: {TestId}, SoC: {SoC}, FileName: {FileName}, TotalRows: {TotalRows}";
+        }
     }
 }
