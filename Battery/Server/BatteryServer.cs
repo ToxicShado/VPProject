@@ -78,26 +78,51 @@ namespace Server
             
             try
             {
+                // First perform basic validation
                 validateSample(sample);
-                FileOperations.AddNewEntry(SessionData, sample);
                 
-                totalSamplesReceived++;
-                isValid = true;
+                // Then perform bounds validation
+                bool boundsValid = _eventService.ValidateSampleBounds(sample, SessionData);
                 
-                _eventService.RaiseSampleReceived(sample, SessionData, totalSamplesReceived, expectedTotalSamples, isValid);
-                
-                // Show progress every 10 samples or for small datasets every sample
-                if (expectedTotalSamples <= 20 || totalSamplesReceived % 10 == 0 || totalSamplesReceived == expectedTotalSamples)
+                if (boundsValid)
                 {
-                    double progressPercentage = expectedTotalSamples > 0 ? (double)totalSamplesReceived / expectedTotalSamples * 100 : 0;
-                    Console.WriteLine($"[SERVER STATUS] Transfer in progress... {totalSamplesReceived}/{expectedTotalSamples} samples ({progressPercentage:F1}%)");
+                    // Sample passed all validations - add to main file
+                    FileOperations.AddNewEntry(SessionData, sample);
+                    totalSamplesReceived++;
+                    isValid = true;
+                    
+                    _eventService.RaiseSampleReceived(sample, SessionData, totalSamplesReceived, expectedTotalSamples, isValid);
+                    
+                    // Show progress every 10 samples or for small datasets every sample
+                    if (expectedTotalSamples <= 20 || totalSamplesReceived % 10 == 0 || totalSamplesReceived == expectedTotalSamples)
+                    {
+                        double progressPercentage = expectedTotalSamples > 0 ? (double)totalSamplesReceived / expectedTotalSamples * 100 : 0;
+                        Console.WriteLine($"[SERVER STATUS] Transfer in progress... {totalSamplesReceived}/{expectedTotalSamples} samples ({progressPercentage:F1}%)");
+                    }
+                    
+                    return new CommandReturnValues()
+                    {
+                        State = STATE.ACK,
+                        Status = totalSamplesReceived >= expectedTotalSamples ? STATUS.COMPLETED : STATUS.IN_PROGRESS
+                    };
                 }
-                
-                return new CommandReturnValues()
+                else
                 {
-                    State = STATE.ACK,
-                    Status = totalSamplesReceived >= expectedTotalSamples ? STATUS.COMPLETED : STATUS.IN_PROGRESS
-                };
+                    // Sample failed bounds validation - reject and log to rejects.csv
+                    string rejectReason = "Sample failed bounds validation (resistance or range out of bounds)";
+                    FileOperations.LogFailedSample(SessionData, sample, rejectReason);
+                    
+                    // Still raise sample received event to track rejected samples
+                    _eventService.RaiseSampleReceived(sample, SessionData, totalSamplesReceived + 1, expectedTotalSamples, isValid);
+                    
+                    Console.WriteLine($"[SERVER STATUS] Sample {sample.RowIndex} rejected: {rejectReason}");
+                    
+                    return new CommandReturnValues()
+                    {
+                        State = STATE.NACK,
+                        Status = STATUS.IN_PROGRESS  // Continue processing, don't end session on bounds failure
+                    };
+                }
             }
             catch (Exception ex)
             {
@@ -112,7 +137,7 @@ namespace Server
                 return new CommandReturnValues()
                 {
                     State = STATE.NACK,
-                    Status = STATUS.COMPLETED
+                    Status = STATUS.COMPLETED  // End session on critical validation errors
                 };
             }
         }
