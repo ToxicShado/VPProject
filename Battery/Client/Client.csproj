@@ -50,16 +50,77 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
-    <None Include="MockData\Hk_IFR14500_SoC_100_03-07-2023_11-46.csv" />
-    <Resource Include="MockData\Hk_IFR14500_SoC_10_04-07-2023_04-04.csv">
+    <Content Include="MockData\B01\Capacity measurements\2023-5-16-12-19-14-EBD-A20H_BATT1.bmp" />
+    <None Include="MockData\B01\Capacity measurements\2023-5-16-12-17-17-EBD-A20H-1-1_BATT1.csv" />
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_100_03-07-2023_11-46.csv">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_10_04-07-2023_04-04.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_15_04-07-2023_03-16.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_20_04-07-2023_02-15.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_25_04-07-2023_01-27.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_30_04-07-2023_00-26.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_35_03-07-2023_23-38.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_40_03-07-2023_22-38.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_45_03-07-2023_21-50.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_50_03-07-2023_20-49.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_55_03-07-2023_20-01.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_5_04-07-2023_05-13.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_60_03-07-2023_19-00.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_65_03-07-2023_18-12.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_70_03-07-2023_17-12.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_75_03-07-2023_16-24.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_80_03-07-2023_15-23.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_85_03-07-2023_14-35.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_90_03-07-2023_13-35.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="MockData\B01\EIS measurements\Test_1\Hioki\Hk_IFR14500_SoC_95_03-07-2023_12-47.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Common\Common.csproj">
       <Project>{C13DE77C-F93F-4B84-BCA0-941F38FF88D5}</Project>
       <Name>Common</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="MockData\B01\EIS measurements\Test_2\Hioki\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

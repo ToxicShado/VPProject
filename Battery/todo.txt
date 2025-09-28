@@ -2,16 +2,12 @@
 
 Podesiti netTcpBinding (streaming, MaxReceivedMessageSize, timeouts) i hostovanje, da li je OK
 
-Gde treba da je konfiguracija? Kada treba da se ucitava? Koje su vrednosti za threshold-ove?
-(f) pragovi su u konfiguraciji:
-V_threshold, Z_threshold i ±25% odstupanje od tekućeg proseka.
-
-
 IN PROGRESS / DONE how to do these statuses? or should i not make them inside of the functions so that i do not return them directly, but just acknowledge that something has been received and then wait 
 for the function to finish to send the COMPLETED status afterwards
 
 
-
+Zadatak: WCF servis, operacije i validacija podataka
+Server, klijent, ili oba?
 
 
  klijent prolazi for
