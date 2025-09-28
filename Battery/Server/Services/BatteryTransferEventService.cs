@@ -53,6 +53,10 @@ namespace Server.Services
             if (_appSettings["Z_threshold"] == null) _appSettings["Z_threshold"] = "0.05";
             if (_appSettings["DeviationPercent"] == null) _appSettings["DeviationPercent"] = "25";
             if (_appSettings["T_threshold"] == null) _appSettings["T_threshold"] = "5.0";
+            if (_appSettings["R_min"] == null) _appSettings["R_min"] = "0.05";
+            if (_appSettings["R_max"] == null) _appSettings["R_max"] = "0.3";
+            if (_appSettings["Range_min"] == null) _appSettings["Range_min"] = "0.2";
+            if (_appSettings["Range_max"] == null) _appSettings["Range_max"] = "3.5";
             if (_appSettings["EnableDetailedConsoleLogging"] == null) _appSettings["EnableDetailedConsoleLogging"] = "false";
             if (_appSettings["EnableWarningConsoleLogging"] == null) _appSettings["EnableWarningConsoleLogging"] = "true";
             if (_appSettings["EnableFileLogging"] == null) _appSettings["EnableFileLogging"] = "true";
@@ -182,6 +186,54 @@ namespace Server.Services
     }
 
     /// <summary>
+    /// Event arguments for resistance out of bounds event
+    /// </summary>
+    public class ResistanceOutOfBoundsEventArgs : EventArgs
+    {
+        public EisSample Sample { get; set; }
+        public EisMeta SessionData { get; set; }
+        public double ActualValue { get; set; }
+        public double MinThreshold { get; set; }
+        public double MaxThreshold { get; set; }
+        public string BoundsType { get; set; }
+        public DateTime DetectionTime { get; set; }
+
+        public ResistanceOutOfBoundsEventArgs(EisSample sample, EisMeta sessionData, double actualValue, double minThreshold, double maxThreshold, string boundsType)
+        {
+            Sample = sample;
+            SessionData = sessionData;
+            ActualValue = actualValue;
+            MinThreshold = minThreshold;
+            MaxThreshold = maxThreshold;
+            BoundsType = boundsType;
+            DetectionTime = DateTime.Now;
+        }
+    }
+
+    /// <summary>
+    /// Event arguments for range mismatch event
+    /// </summary>
+    public class RangeMismatchEventArgs : EventArgs
+    {
+        public EisSample Sample { get; set; }
+        public EisMeta SessionData { get; set; }
+        public double ActualValue { get; set; }
+        public double MinThreshold { get; set; }
+        public double MaxThreshold { get; set; }
+        public DateTime DetectionTime { get; set; }
+
+        public RangeMismatchEventArgs(EisSample sample, EisMeta sessionData, double actualValue, double minThreshold, double maxThreshold)
+        {
+            Sample = sample;
+            SessionData = sessionData;
+            ActualValue = actualValue;
+            MinThreshold = minThreshold;
+            MaxThreshold = maxThreshold;
+            DetectionTime = DateTime.Now;
+        }
+    }
+
+    /// <summary>
     /// Delegate definitions for events
     /// </summary>
     public delegate void TransferStartedEventHandler(object sender, TransferStartedEventArgs e);
@@ -189,6 +241,8 @@ namespace Server.Services
     public delegate void TransferCompletedEventHandler(object sender, TransferCompletedEventArgs e);
     public delegate void WarningRaisedEventHandler(object sender, WarningRaisedEventArgs e);
     public delegate void TemperatureSpikeEventHandler(object sender, TemperatureSpikeEventArgs e);
+    public delegate void ResistanceOutOfBoundsEventHandler(object sender, ResistanceOutOfBoundsEventArgs e);
+    public delegate void RangeMismatchEventHandler(object sender, RangeMismatchEventArgs e);
 
     /// <summary>
     /// Event service for monitoring battery data transfer operations
@@ -203,6 +257,10 @@ namespace Server.Services
         private readonly double _impedanceThreshold;
         private readonly double _deviationPercent;
         private readonly double _temperatureThreshold;
+        private readonly double _resistanceMin;
+        private readonly double _resistanceMax;
+        private readonly double _rangeMin;
+        private readonly double _rangeMax;
 
         // Session tracking
         private DateTime _sessionStartTime;
@@ -240,6 +298,8 @@ namespace Server.Services
         public event TransferCompletedEventHandler OnTransferCompleted;
         public event WarningRaisedEventHandler OnWarningRaised;
         public event TemperatureSpikeEventHandler OnTemperatureSpike;
+        public event ResistanceOutOfBoundsEventHandler OnResistanceOutOfBounds;
+        public event RangeMismatchEventHandler OnRangeMismatch;
 
         /// <summary>
         /// Private constructor for singleton
@@ -251,6 +311,10 @@ namespace Server.Services
             _impedanceThreshold = double.TryParse(ConfigHelper.GetAppSetting("Z_threshold"), out double zThreshold) ? zThreshold : 0.05;
             _deviationPercent = double.TryParse(ConfigHelper.GetAppSetting("DeviationPercent"), out double devPercent) ? devPercent : 25.0;
             _temperatureThreshold = double.TryParse(ConfigHelper.GetAppSetting("T_threshold"), out double tThreshold) ? tThreshold : 5.0;
+            _resistanceMin = double.TryParse(ConfigHelper.GetAppSetting("R_min"), out double rMin) ? rMin : 0.05;
+            _resistanceMax = double.TryParse(ConfigHelper.GetAppSetting("R_max"), out double rMax) ? rMax : 0.3;
+            _rangeMin = double.TryParse(ConfigHelper.GetAppSetting("Range_min"), out double rangeMin) ? rangeMin : 0.2;
+            _rangeMax = double.TryParse(ConfigHelper.GetAppSetting("Range_max"), out double rangeMax) ? rangeMax : 3.5;
         }
 
         /// <summary>
@@ -320,6 +384,67 @@ namespace Server.Services
         {
             var args = new TemperatureSpikeEventArgs(currentSample, previousSample, sessionData, temperatureDelta, direction, _temperatureThreshold);
             OnTemperatureSpike?.Invoke(this, args);
+        }
+
+        /// <summary>
+        /// Raise resistance out of bounds event
+        /// </summary>
+        public void RaiseResistanceOutOfBounds(EisSample sample, EisMeta sessionData, double actualValue, double minThreshold, double maxThreshold, string boundsType)
+        {
+            var args = new ResistanceOutOfBoundsEventArgs(sample, sessionData, actualValue, minThreshold, maxThreshold, boundsType);
+            OnResistanceOutOfBounds?.Invoke(this, args);
+        }
+
+        /// <summary>
+        /// Raise range mismatch event
+        /// </summary>
+        public void RaiseRangeMismatch(EisSample sample, EisMeta sessionData, double actualValue, double minThreshold, double maxThreshold)
+        {
+            var args = new RangeMismatchEventArgs(sample, sessionData, actualValue, minThreshold, maxThreshold);
+            OnRangeMismatch?.Invoke(this, args);
+        }
+
+        /// <summary>
+        /// Validate sample bounds and raise appropriate events
+        /// Returns false if validation fails (sample should be rejected)
+        /// </summary>
+        public bool ValidateSampleBounds(EisSample sample, EisMeta sessionData)
+        {
+            if (sample == null) return true;
+
+            bool isValid = true;
+
+            // Check resistance bounds
+            if (sample.R_ohm < _resistanceMin || sample.R_ohm > _resistanceMax)
+            {
+                string boundsType = sample.R_ohm < _resistanceMin ? "BELOW_MIN" : "ABOVE_MAX";
+                
+                RaiseResistanceOutOfBounds(sample, sessionData, sample.R_ohm, _resistanceMin, _resistanceMax, boundsType);
+                
+                string message = $"Resistance out of bounds: {sample.R_ohm:F6}? " +
+                               $"(Expected: {_resistanceMin:F3}? - {_resistanceMax:F3}?) | " +
+                               $"Sample: {sample.RowIndex} | SoC: {sessionData?.SoC}% | " +
+                               $"BatteryId: {sessionData?.BatteryId} | Frequency: {sample.FrequencyHz:F2}Hz";
+
+                RaiseWarning("RESISTANCE_OUT_OF_BOUNDS", message, "CRITICAL", sample, sessionData);
+                isValid = false;
+            }
+
+            // Check range bounds
+            if (sample.Range_ohm < _rangeMin || sample.Range_ohm > _rangeMax)
+            {
+                RaiseRangeMismatch(sample, sessionData, sample.Range_ohm, _rangeMin, _rangeMax);
+                
+                string message = $"Range mismatch: {sample.Range_ohm:F3}? " +
+                               $"(Expected: {_rangeMin:F3}? - {_rangeMax:F3}?) | " +
+                               $"Sample: {sample.RowIndex} | SoC: {sessionData?.SoC}% | " +
+                               $"BatteryId: {sessionData?.BatteryId} | Frequency: {sample.FrequencyHz:F2}Hz";
+
+                RaiseWarning("RANGE_MISMATCH", message, "CRITICAL", sample, sessionData);
+                isValid = false;
+            }
+
+            return isValid;
         }
 
         /// <summary>

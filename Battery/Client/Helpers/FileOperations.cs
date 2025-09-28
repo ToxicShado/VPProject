@@ -139,7 +139,6 @@ namespace Client.Helpers
             {
                 if (disposing)
                 {
-                    // Clear file list
                     fileList?.Clear();
                     fileList = null;
                 }

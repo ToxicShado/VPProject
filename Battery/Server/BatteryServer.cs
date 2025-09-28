@@ -79,25 +79,44 @@ namespace Server
             try
             {
                 validateSample(sample);
-                FileOperations.AddNewEntry(SessionData, sample);
                 
-                totalSamplesReceived++;
-                isValid = true;
+                bool boundsValid = _eventService.ValidateSampleBounds(sample, SessionData);
                 
-                _eventService.RaiseSampleReceived(sample, SessionData, totalSamplesReceived, expectedTotalSamples, isValid);
-                
-                // Show progress every 10 samples or for small datasets every sample
-                if (expectedTotalSamples <= 20 || totalSamplesReceived % 10 == 0 || totalSamplesReceived == expectedTotalSamples)
+                if (boundsValid)
                 {
-                    double progressPercentage = expectedTotalSamples > 0 ? (double)totalSamplesReceived / expectedTotalSamples * 100 : 0;
-                    Console.WriteLine($"[SERVER STATUS] Transfer in progress... {totalSamplesReceived}/{expectedTotalSamples} samples ({progressPercentage:F1}%)");
+                    FileOperations.AddNewEntry(SessionData, sample);
+                    totalSamplesReceived++;
+                    isValid = true;
+                    
+                    _eventService.RaiseSampleReceived(sample, SessionData, totalSamplesReceived, expectedTotalSamples, isValid);
+                    
+                    if (expectedTotalSamples <= 20 || totalSamplesReceived % 10 == 0 || totalSamplesReceived == expectedTotalSamples)
+                    {
+                        double progressPercentage = expectedTotalSamples > 0 ? (double)totalSamplesReceived / expectedTotalSamples * 100 : 0;
+                        Console.WriteLine($"[SERVER STATUS] Transfer in progress... {totalSamplesReceived}/{expectedTotalSamples} samples ({progressPercentage:F1}%)");
+                    }
+                    
+                    return new CommandReturnValues()
+                    {
+                        State = STATE.ACK,
+                        Status = totalSamplesReceived >= expectedTotalSamples ? STATUS.COMPLETED : STATUS.IN_PROGRESS
+                    };
                 }
-                
-                return new CommandReturnValues()
+                else
                 {
-                    State = STATE.ACK,
-                    Status = totalSamplesReceived >= expectedTotalSamples ? STATUS.COMPLETED : STATUS.IN_PROGRESS
-                };
+                    string rejectReason = "Sample failed bounds validation (resistance or range out of bounds)";
+                    FileOperations.LogFailedSample(SessionData, sample, rejectReason);
+                    
+                    _eventService.RaiseSampleReceived(sample, SessionData, totalSamplesReceived + 1, expectedTotalSamples, isValid);
+                    
+                    Console.WriteLine($"[SERVER STATUS] Sample {sample.RowIndex} rejected: {rejectReason}");
+                    
+                    return new CommandReturnValues()
+                    {
+                        State = STATE.NACK,
+                        Status = STATUS.IN_PROGRESS  
+                    };
+                }
             }
             catch (Exception ex)
             {
@@ -112,7 +131,7 @@ namespace Server
                 return new CommandReturnValues()
                 {
                     State = STATE.NACK,
-                    Status = STATUS.COMPLETED
+                    Status = STATUS.COMPLETED 
                 };
             }
         }
@@ -126,10 +145,8 @@ namespace Server
                 totalSamplesReceived = 0;
                 expectedTotalSamples = data.TotalRows;
                 
-                // Initialize session directories and files
                 FileOperations.InitializeSession(data);
                 
-                // Raise transfer started event
                 _eventService.RaiseTransferStarted(data, expectedTotalSamples);
                 
                 Console.WriteLine($"[SERVER STATUS] Session started for BatteryId: {data.BatteryId}, TestId: {data.TestId}, SoC: {data.SoC}%");

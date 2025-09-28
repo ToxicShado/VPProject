@@ -245,7 +245,6 @@ namespace Server.Helpers
             {
                 if (string.IsNullOrEmpty(currentSessionPath) || currentSessionManager == null)
                 {
-                    // Fallback to old logging method if session path is not available
                     LogFailedSampleFallback(sessionData, sample, errorMessage);
                     return;
                 }
@@ -256,7 +255,6 @@ namespace Server.Helpers
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed to log rejected sample: {ex.Message}");
-                // Fallback to old logging method
                 LogFailedSampleFallback(sessionData, sample, errorMessage);
             }
         }
