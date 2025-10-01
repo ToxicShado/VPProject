@@ -263,6 +263,7 @@ namespace Client.Helpers
                 string soc = ExtractSoCFromFilename(fileName);
                 if (string.IsNullOrEmpty(soc))
                 {
+                    logger.LogError($"Failed to extract SoC from path: {filePath}");
                     soc = "Unknown";
                 }
 

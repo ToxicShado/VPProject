@@ -140,6 +140,8 @@ namespace Server
         {
             try
             {
+                validateSessionData(data);
+                
                 SessionData = data;
                 lastIndex = 0;
                 totalSamplesReceived = 0;
@@ -169,6 +171,29 @@ namespace Server
                     Status = STATUS.COMPLETED
                 };
             }
+        }
+
+        private void validateSessionData(EisMeta data)
+        {
+            if (data == null)
+                throw new FaultException<ValidationFault>(
+                    new ValidationFault("Session data is null."), "Validation error");
+
+            if (string.IsNullOrWhiteSpace(data.BatteryId))
+                throw new FaultException<ValidationFault>(
+                    new ValidationFault("BatteryId cannot be null or empty."), "Validation error");
+
+            if (string.IsNullOrWhiteSpace(data.TestId))
+                throw new FaultException<ValidationFault>(
+                    new ValidationFault("TestId cannot be null or empty."), "Validation error");
+
+            if (string.IsNullOrWhiteSpace(data.SoC))
+                throw new FaultException<ValidationFault>(
+                    new ValidationFault("SoC cannot be null or empty."), "Validation error");
+
+            if (data.TotalRows <= 0)
+                throw new FaultException<ValidationFault>(
+                    new ValidationFault("TotalRows must be greater than 0."), "Validation error");
         }
 
         public bool validateSample(EisSample sample)
