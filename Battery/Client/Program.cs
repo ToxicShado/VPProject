@@ -45,7 +45,6 @@ namespace Client
                     catch (CommunicationException ex)
                     {
                         Console.WriteLine($"Communication error during session for {key}: {ex.Message}");
-                        // Try to recover connection if possible
                         try
                         {
                             if (proxy != null)
@@ -53,7 +52,6 @@ namespace Client
                                 ((ICommunicationObject)proxy).Abort();
                             }
                             
-                            // Recreate connection
                             proxy = factory.CreateChannel();
                             Console.WriteLine("Connection recovered, continuing...");
                         }

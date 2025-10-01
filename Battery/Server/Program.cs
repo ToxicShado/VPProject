@@ -12,13 +12,11 @@ namespace Server
             Console.WriteLine("=== Battery Server with Event System ===");
             Console.WriteLine("Initializing event services...");
 
-            // Initialize event service and subscribers
             var eventService = BatteryTransferEventService.Instance;
             var consoleSubscriber = new ConsoleEventSubscriber();
             var fileLogSubscriber = new FileLogEventSubscriber();
             var statisticsSubscriber = new StatisticsEventSubscriber();
 
-            // Subscribe to events
             consoleSubscriber.Subscribe(eventService);
             fileLogSubscriber.Subscribe(eventService);
             statisticsSubscriber.Subscribe(eventService);
@@ -38,7 +36,6 @@ namespace Server
                     Console.WriteLine("Event monitoring is active");
                     Console.WriteLine("Press any key to display current statistics, or 'q' to quit");
                     
-                    // Interactive loop for statistics and control
                     ConsoleKeyInfo keyInfo;
                     do
                     {
@@ -77,13 +74,11 @@ namespace Server
             {
                 Console.WriteLine($"Server error: {ex.Message}");
                 
-                // Raise error event
                 var eventService2 = BatteryTransferEventService.Instance;
                 eventService2.RaiseWarning("SERVER_ERROR", $"Server encountered fatal error: {ex.Message}", "CRITICAL");
             }
             finally
             {
-                // Cleanup subscriptions
                 try
                 {
                     consoleSubscriber.Unsubscribe(eventService);

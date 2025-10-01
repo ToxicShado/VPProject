@@ -96,13 +96,4 @@ namespace Client.Helpers
         }
     }
 
-    /// <summary>
-    /// Backward compatibility - renamed from ConsoleLogger
-    /// </summary>
-    public class ConsoleLogger : FileLogger
-    {
-        public ConsoleLogger() : base("log.txt")
-        {
-        }
-    }
 }

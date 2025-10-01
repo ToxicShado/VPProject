@@ -13,9 +13,13 @@ namespace Common
     {
         [OperationContract]
         CommandReturnValues StartSession(EisMeta data);
+
         [OperationContract]
         CommandReturnValues EndSession();
+
         [OperationContract]
+        [FaultContract(typeof(ValidationFault))]
+        [FaultContract(typeof(DataFormatFault))]
         CommandReturnValues PushSample(EisSample sample);
     }
 

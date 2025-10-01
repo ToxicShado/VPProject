@@ -11,9 +11,6 @@ namespace Server.Helpers
         void LogError(string message, Exception ex);
     }
 
-    /// <summary>
-    /// File logger implementation that writes to log.txt
-    /// </summary>
     public class FileLogger : ILogger, IDisposable
     {
         private readonly string logFilePath;
@@ -24,7 +21,6 @@ namespace Server.Helpers
         {
             this.logFilePath = logFilePath;
             
-            // Ensure directory exists
             var directory = Path.GetDirectoryName(Path.GetFullPath(logFilePath));
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             {
@@ -71,8 +67,7 @@ namespace Server.Helpers
             }
             catch (Exception)
             {
-                // Silently fail if we can't write to log file
-                // Could fallback to console in debug scenarios
+                Console.WriteLine("Couldn't write logs");
             }
         }
 
@@ -96,13 +91,4 @@ namespace Server.Helpers
         }
     }
 
-    /// <summary>
-    /// Backward compatibility - renamed from ConsoleLogger
-    /// </summary>
-    public class ConsoleLogger : FileLogger
-    {
-        public ConsoleLogger() : base("log.txt")
-        {
-        }
-    }
 }

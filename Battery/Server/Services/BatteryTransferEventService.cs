@@ -6,9 +6,6 @@ using System.Xml;
 
 namespace Server.Services
 {
-    /// <summary>
-    /// Configuration helper for reading app.config values
-    /// </summary>
     public static class ConfigHelper
     {
         private static NameValueCollection _appSettings;
@@ -48,7 +45,6 @@ namespace Server.Services
                 Console.WriteLine($"Warning: Could not load app.config: {ex.Message}");
             }
             
-            // Set default values if not found
             if (_appSettings["V_threshold"] == null) _appSettings["V_threshold"] = "3.5";
             if (_appSettings["Z_threshold"] == null) _appSettings["Z_threshold"] = "0.05";
             if (_appSettings["DeviationPercent"] == null) _appSettings["DeviationPercent"] = "25";
@@ -70,9 +66,6 @@ namespace Server.Services
         }
     }
 
-    /// <summary>
-    /// Event arguments for transfer started event
-    /// </summary>
     public class TransferStartedEventArgs : EventArgs
     {
         public EisMeta SessionData { get; set; }
@@ -87,9 +80,6 @@ namespace Server.Services
         }
     }
 
-    /// <summary>
-    /// Event arguments for sample received event
-    /// </summary>
     public class SampleReceivedEventArgs : EventArgs
     {
         public EisSample Sample { get; set; }
@@ -110,9 +100,6 @@ namespace Server.Services
         }
     }
 
-    /// <summary>
-    /// Event arguments for transfer completed event
-    /// </summary>
     public class TransferCompletedEventArgs : EventArgs
     {
         public EisMeta SessionData { get; set; }
@@ -137,9 +124,6 @@ namespace Server.Services
         }
     }
 
-    /// <summary>
-    /// Event arguments for warning raised event
-    /// </summary>
     public class WarningRaisedEventArgs : EventArgs
     {
         public string WarningType { get; set; }
@@ -160,9 +144,6 @@ namespace Server.Services
         }
     }
 
-    /// <summary>
-    /// Event arguments for temperature spike event
-    /// </summary>
     public class TemperatureSpikeEventArgs : EventArgs
     {
         public EisSample CurrentSample { get; set; }
@@ -184,10 +165,6 @@ namespace Server.Services
             DetectionTime = DateTime.Now;
         }
     }
-
-    /// <summary>
-    /// Event arguments for resistance out of bounds event
-    /// </summary>
     public class ResistanceOutOfBoundsEventArgs : EventArgs
     {
         public EisSample Sample { get; set; }
@@ -210,9 +187,6 @@ namespace Server.Services
         }
     }
 
-    /// <summary>
-    /// Event arguments for range mismatch event
-    /// </summary>
     public class RangeMismatchEventArgs : EventArgs
     {
         public EisSample Sample { get; set; }
@@ -233,9 +207,6 @@ namespace Server.Services
         }
     }
 
-    /// <summary>
-    /// Delegate definitions for events
-    /// </summary>
     public delegate void TransferStartedEventHandler(object sender, TransferStartedEventArgs e);
     public delegate void SampleReceivedEventHandler(object sender, SampleReceivedEventArgs e);
     public delegate void TransferCompletedEventHandler(object sender, TransferCompletedEventArgs e);
@@ -244,15 +215,11 @@ namespace Server.Services
     public delegate void ResistanceOutOfBoundsEventHandler(object sender, ResistanceOutOfBoundsEventArgs e);
     public delegate void RangeMismatchEventHandler(object sender, RangeMismatchEventArgs e);
 
-    /// <summary>
-    /// Event service for monitoring battery data transfer operations
-    /// </summary>
     public class BatteryTransferEventService
     {
         private static BatteryTransferEventService _instance;
         private static readonly object _lock = new object();
 
-        // Configuration values from app.config
         private readonly double _voltageThreshold;
         private readonly double _impedanceThreshold;
         private readonly double _deviationPercent;
@@ -262,25 +229,20 @@ namespace Server.Services
         private readonly double _rangeMin;
         private readonly double _rangeMax;
 
-        // Session tracking
         private DateTime _sessionStartTime;
         private int _validSamplesCount;
         private int _rejectedSamplesCount;
         private EisMeta _currentSessionData;
         
-        // Temperature spike detection
         private EisSample _previousSample;
 
-        // Running averages for deviation detection
         private double _runningVoltageSum = 0;
         private double _runningImpedanceSum = 0;
         private double _runningResistanceSum = 0;
         private int _averageSampleCount = 0;
-        private const int MIN_SAMPLES_FOR_AVERAGE = 5; // Minimum samples needed to calculate meaningful average
+        private const int MIN_SAMPLES_FOR_AVERAGE = 5;
 
-        /// <summary>
-        /// Singleton instance
-        /// </summary>
+
         public static BatteryTransferEventService Instance
         {
             get
@@ -297,9 +259,7 @@ namespace Server.Services
             }
         }
 
-        /// <summary>
-        /// Events
-        /// </summary>
+
         public event TransferStartedEventHandler OnTransferStarted;
         public event SampleReceivedEventHandler OnSampleReceived;
         public event TransferCompletedEventHandler OnTransferCompleted;
@@ -308,12 +268,9 @@ namespace Server.Services
         public event ResistanceOutOfBoundsEventHandler OnResistanceOutOfBounds;
         public event RangeMismatchEventHandler OnRangeMismatch;
 
-        /// <summary>
-        /// Private constructor for singleton
-        /// </summary>
+
         private BatteryTransferEventService()
         {
-            // Load configuration values
             _voltageThreshold = double.TryParse(ConfigHelper.GetAppSetting("V_threshold"), out double vThreshold) ? vThreshold : 3.5;
             _impedanceThreshold = double.TryParse(ConfigHelper.GetAppSetting("Z_threshold"), out double zThreshold) ? zThreshold : 0.05;
             _deviationPercent = double.TryParse(ConfigHelper.GetAppSetting("DeviationPercent"), out double devPercent) ? devPercent : 25.0;
@@ -324,18 +281,14 @@ namespace Server.Services
             _rangeMax = double.TryParse(ConfigHelper.GetAppSetting("Range_max"), out double rangeMax) ? rangeMax : 3.5;
         }
 
-        /// <summary>
-        /// Raise transfer started event
-        /// </summary>
         public void RaiseTransferStarted(EisMeta sessionData, int expectedSamples)
         {
             _sessionStartTime = DateTime.Now;
             _validSamplesCount = 0;
             _rejectedSamplesCount = 0;
             _currentSessionData = sessionData;
-            _previousSample = null; // Reset previous sample for new session
+            _previousSample = null; 
 
-            // Reset running averages for new session
             _runningVoltageSum = 0;
             _runningImpedanceSum = 0;
             _runningResistanceSum = 0;
@@ -345,9 +298,7 @@ namespace Server.Services
             OnTransferStarted?.Invoke(this, args);
         }
 
-        /// <summary>
-        /// Raise sample received event
-        /// </summary>
+
         public void RaiseSampleReceived(EisSample sample, EisMeta sessionData, int sampleCount, int totalSamples, bool isValid)
         {
             if (isValid)
@@ -358,45 +309,34 @@ namespace Server.Services
             var args = new SampleReceivedEventArgs(sample, sessionData, sampleCount, totalSamples, isValid);
             OnSampleReceived?.Invoke(this, args);
 
-            // Update running averages for valid samples only
             if (isValid && sample != null)
             {
                 UpdateRunningAverages(sample);
             }
 
-            // Check for warnings based on configuration thresholds
             CheckForWarnings(sample, sessionData);
             
-            // Check for temperature spikes if we have a valid sample
             if (isValid && sample != null)
             {
                 CheckForTemperatureSpike(sample, sessionData);
-                _previousSample = sample; // Store current sample as previous for next comparison
+                _previousSample = sample; 
             }
         }
 
-        /// <summary>
-        /// Update running averages with new valid sample
-        /// </summary>
         private void UpdateRunningAverages(EisSample sample)
         {
             _averageSampleCount++;
             _runningVoltageSum += sample.Voltage_V;
             _runningResistanceSum += sample.R_ohm;
             
-            // Calculate total impedance for this sample
             double totalImpedance = Math.Sqrt(sample.R_ohm * sample.R_ohm + sample.X_ohm * sample.X_ohm);
             _runningImpedanceSum += totalImpedance;
         }
 
-        /// <summary>
-        /// Check for warnings based on configuration thresholds
-        /// </summary>
         private void CheckForWarnings(EisSample sample, EisMeta sessionData)
         {
             if (sample == null) return;
 
-            // Check voltage threshold
             if (sample.Voltage_V < _voltageThreshold)
             {
                 RaiseWarning("VOLTAGE_LOW", 
@@ -404,7 +344,6 @@ namespace Server.Services
                     "WARNING", sample, sessionData);
             }
 
-            // Check impedance threshold  
             double totalImpedance = Math.Sqrt(sample.R_ohm * sample.R_ohm + sample.X_ohm * sample.X_ohm);
             if (totalImpedance < _impedanceThreshold)
             {
@@ -413,16 +352,12 @@ namespace Server.Services
                     "WARNING", sample, sessionData);
             }
 
-            // Check for ±25% deviation from running average (only after we have enough samples)
             if (_averageSampleCount >= MIN_SAMPLES_FOR_AVERAGE)
             {
                 CheckAverageDeviations(sample, sessionData, totalImpedance);
             }
         }
 
-        /// <summary>
-        /// Check for ±25% deviation from running averages
-        /// </summary>
         private void CheckAverageDeviations(EisSample sample, EisMeta sessionData, double totalImpedance)
         {
             // Calculate current running averages
@@ -464,65 +399,44 @@ namespace Server.Services
             }
         }
 
-        /// <summary>
-        /// Raise transfer completed event
-        /// </summary>
         public void RaiseTransferCompleted(EisMeta sessionData, int totalSamples, bool isSuccessful)
         {
             var args = new TransferCompletedEventArgs(sessionData, _sessionStartTime, totalSamples, _validSamplesCount, _rejectedSamplesCount, isSuccessful);
             OnTransferCompleted?.Invoke(this, args);
             
-            // Reset previous sample at end of session
             _previousSample = null;
         }
 
-        /// <summary>
-        /// Raise warning event
-        /// </summary>
         public void RaiseWarning(string warningType, string message, string severity, EisSample sample = null, EisMeta sessionData = null)
         {
             var args = new WarningRaisedEventArgs(warningType, message, severity, sample, sessionData);
             OnWarningRaised?.Invoke(this, args);
         }
 
-        /// <summary>
-        /// Raise temperature spike event
-        /// </summary>
         public void RaiseTemperatureSpike(EisSample currentSample, EisSample previousSample, EisMeta sessionData, double temperatureDelta, string direction)
         {
             var args = new TemperatureSpikeEventArgs(currentSample, previousSample, sessionData, temperatureDelta, direction, _temperatureThreshold);
             OnTemperatureSpike?.Invoke(this, args);
         }
 
-        /// <summary>
-        /// Raise resistance out of bounds event
-        /// </summary>
         public void RaiseResistanceOutOfBounds(EisSample sample, EisMeta sessionData, double actualValue, double minThreshold, double maxThreshold, string boundsType)
         {
             var args = new ResistanceOutOfBoundsEventArgs(sample, sessionData, actualValue, minThreshold, maxThreshold, boundsType);
             OnResistanceOutOfBounds?.Invoke(this, args);
         }
 
-        /// <summary>
-        /// Raise range mismatch event
-        /// </summary>
         public void RaiseRangeMismatch(EisSample sample, EisMeta sessionData, double actualValue, double minThreshold, double maxThreshold)
         {
             var args = new RangeMismatchEventArgs(sample, sessionData, actualValue, minThreshold, maxThreshold);
             OnRangeMismatch?.Invoke(this, args);
         }
 
-        /// <summary>
-        /// Validate sample bounds and raise appropriate events
-        /// Returns false if validation fails (sample should be rejected)
-        /// </summary>
         public bool ValidateSampleBounds(EisSample sample, EisMeta sessionData)
         {
             if (sample == null) return true;
 
             bool isValid = true;
 
-            // Check resistance bounds
             if (sample.R_ohm < _resistanceMin || sample.R_ohm > _resistanceMax)
             {
                 string boundsType = sample.R_ohm < _resistanceMin ? "BELOW_MIN" : "ABOVE_MAX";
@@ -538,7 +452,6 @@ namespace Server.Services
                 isValid = false;
             }
 
-            // Check range bounds
             if (sample.Range_ohm < _rangeMin || sample.Range_ohm > _rangeMax)
             {
                 RaiseRangeMismatch(sample, sessionData, sample.Range_ohm, _rangeMin, _rangeMax);
@@ -555,27 +468,19 @@ namespace Server.Services
             return isValid;
         }
 
-        /// <summary>
-        /// Check for temperature spikes between consecutive measurements
-        /// Formula: ?T = T(t) - T(t-?t)
-        /// </summary>
         private void CheckForTemperatureSpike(EisSample currentSample, EisMeta sessionData)
         {
             if (_previousSample == null || currentSample == null) return;
 
-            // Calculate ΔT = T(t) - T(t-Δt)
             double temperatureDelta = currentSample.T_degC - _previousSample.T_degC;
             double absoluteDelta = Math.Abs(temperatureDelta);
 
-            // Check if |ΔT| > T_threshold
             if (absoluteDelta > _temperatureThreshold)
             {
                 string direction = temperatureDelta > 0 ? "porast" : "pad";
                 
-                // Raise the TemperatureSpike event
                 RaiseTemperatureSpike(currentSample, _previousSample, sessionData, temperatureDelta, direction);
                 
-                // Also raise a warning for logging purposes
                 string message = $"Temperature spike detected: {direction} | " +
                                $"Current T: {currentSample.T_degC:F2}°C | " +
                                $"?T: {temperatureDelta:F2}°C | " +

@@ -8,9 +8,6 @@ using System.Threading.Tasks;
 
 namespace Server.Helpers
 {
-    /// <summary>
-    /// Disposable wrapper for writing to CSV files with proper resource management
-    /// </summary>
     public class CsvFileWriter : IDisposable
     {
         private FileStream fileStream;
@@ -66,9 +63,6 @@ namespace Server.Helpers
         }
     }
 
-    /// <summary>
-    /// Disposable wrapper for session file management
-    /// </summary>
     public class SessionFileManager : IDisposable
     {
         private string sessionPath;
@@ -146,7 +140,6 @@ namespace Server.Helpers
         {
             if (!disposed)
             {
-                // No managed resources to dispose in this case, but pattern is here for consistency
                 disposed = true;
             }
         }
